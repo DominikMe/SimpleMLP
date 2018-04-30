@@ -2,101 +2,128 @@
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace MLP
 {
-    class Program
-    {
-        static void Main(string[] args)
-        {
-            MultiLayerPerceptron mlp = new MultiLayerPerceptron();
+	class Program
+	{
+		static void Main(string[] args)
+		{
+			var mlp = new MultiLayerPerceptron(new[] { 8, 24, 1 })
+			{
+				LearningRate = 0.9,
+				MaxTotalError = 0.0000001,
+				MaxIterations = 5000
+			};
 
-            Condition cond = IsPrime;
-            TargetFunction targetFunc = b => BoolToByte(cond(b));
+			var cond = ContainsCipher7;
+			byte TargetFunc(byte b) => BoolToByte(cond(b));
 
-            byte[] inputs;
-            GenerateByteInputs(out inputs, 20, 120);
-            byte[] desiredOutputs;
-            GenerateByteOutputs(out desiredOutputs, targetFunc, 20, 120);
+			var (trainingInputs, testInputs) = GenerateByteInputs(0.85);
+			var trainingOutputs = GenerateByteOutputs(TargetFunc, trainingInputs);
 
-            mlp.RandomizeWeights();
-            mlp.MaxTotalError = 0.00001;
-            mlp.MaxIterations = 1000;
+			mlp.RandomizeWeights();
+			mlp.Train(trainingInputs, trainingOutputs);
 
-            mlp.Train(inputs, desiredOutputs);
+			Test(mlp, testInputs, TargetFunc);
 
-            Test(mlp, 100, targetFunc);
-            Console.ReadKey();
-        }
+			PrintFirstLayerWeights(mlp);
 
-        delegate bool Condition(byte b);
-        delegate byte TargetFunction(byte b);
+			Console.ReadKey();
+		}
 
-        private static Condition DivisibleBy3 = b => ((int) b) % 3 == 0;
-        private static Condition Less20OrGreater90 = b => (b < 20 || b > 90);
-        private static Condition Equals42 = b => (b == 42);
-        private static Condition Equals23Or42 = b => (b == 23 || b == 42);
-        private static Condition ContainsCipher2 = b => (b.ToString().Contains("2"));
-        private static Condition IsOdd = b => ((int)b) % 2 == 1;
-        private static Condition IsPrime = b => Primes.Contains((int) b);
+		private static void PrintFirstLayerWeights(MultiLayerPerceptron mlp)
+		{
+			var sb = new StringBuilder();
+			for (var i = 0; i < mlp.NeuronsInLayer[0]; i++)
+			{
+				sb.Append($"{GetWeightSum(i):F2},");
+			}
+			sb.Remove(sb.Length - 1, 1);
+			Console.WriteLine(sb);
 
-        private static readonly List<int> Primes = new List<int>() {2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 107, 109, 113, 127, 131, 137, 139, 149, 151, 157, 163, 167, 173, 179, 181, 191, 193, 197, 199, 211, 223, 227, 229, 233, 239, 241}; 
+			double GetWeightSum(int neuron)
+			{
+				var sum = 0d;
+				for (var j = 0; j < mlp.NeuronsInLayer[1]; j++)
+					sum += mlp.getWeight(0, neuron, j) / mlp.NeuronsInLayer[1];
+				return sum;
+			}
+		}
 
-        private static bool ByteToBool(byte b)
-        {
-            if (b > 1)
-                throw new ArgumentException();
-            // lsb
-            return (b & 1) == 1;
-        }
+		delegate bool Condition(byte b);
+		delegate byte TargetFunction(byte b);
 
-        private static byte BoolToByte(bool b)
-        {
-            return b ? (byte) 1 : (byte) 0;
-        }
+		private static readonly Condition DivisibleBy3 = b => ((int)b) % 3 == 0;
+		private static readonly Condition Less20OrGreater90 = b => (b < 20 || b > 90);
+		private static readonly Condition Equals42 = b => (b == 42);
+		private static readonly Condition Equals23Or42 = b => (b == 23 || b == 42);
+		private static readonly Condition ContainsCipher7 = b => (b.ToString().Contains("7"));
+		private static readonly Condition IsOdd = b => ((int)b) % 2 == 1;
+		private static readonly Condition IsPrime = b => Primes.Contains((int)b);
 
-        private static void Test(MultiLayerPerceptron mlp, int n, TargetFunction func)
-        {
-            Console.WriteLine("\n======= Test =======");
-            Random rand = new Random();
-            int matches = 0;
-            for(int i = 0; i < n; i++)
-            {
-                int x = rand.Next(256);
-                byte bx = (byte) x;
-                byte by = mlp.Compute(bx);
-                byte correctY = func(bx);
-                if(correctY == by)
-                {
-                    matches++;
-                    Console.ForegroundColor = ConsoleColor.Green;
-                    Console.WriteLine("{0}: {1} = {2}", x, correctY, by);
-                }
-                else
-                {
-                    Console.ForegroundColor = ConsoleColor.Red;
-                    Console.WriteLine("{0}: {1} != {2}", x, correctY, by);
-                }
-            }
-            Console.ResetColor();
-            Console.WriteLine("\n{0} correct out of {1}", matches, n);
-        }
+		private static readonly List<int> Primes = new List<int>() { 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 107, 109, 113, 127, 131, 137, 139, 149, 151, 157, 163, 167, 173, 179, 181, 191, 193, 197, 199, 211, 223, 227, 229, 233, 239, 241 };
 
-        private static void GenerateByteInputs(out byte[] inputs, int start = 0, int end = 256)
-        {
-            inputs = new byte[end - start];
-            for (int i = start; i < end; i++)
-                inputs[i - start] = byte.Parse(i.ToString()); // BitConverter and endianness check would also work, but we have only one byte anyway
-        }
+		private static bool ByteToBool(byte b)
+		{
+			if (b > 1)
+				throw new ArgumentException();
+			// lsb
+			return (b & 1) == 1;
+		}
 
-        private static void GenerateByteOutputs(out byte[] desiredOutputs, TargetFunction func, int start = 0, int end = 256)
-        {
-            desiredOutputs = new byte[end - start];
-            for (int i = start; i < end; i++)
-                desiredOutputs[i - start] = func((byte) i);
-        }
-    }
+		private static byte BoolToByte(bool b) => b ? (byte)1 : (byte)0;
+
+		private static void Test(MultiLayerPerceptron mlp, byte[] testInputs, TargetFunction func)
+		{
+			Console.WriteLine("\n======= Test =======");
+			var matches = 0;
+			foreach (var bx in testInputs)
+			{
+				var by = mlp.Compute(bx);
+				var correctY = func(bx);
+				if (correctY == by)
+				{
+					matches++;
+					Console.ForegroundColor = ConsoleColor.Green;
+					Console.WriteLine("{0}: {1} = {2}", bx, correctY, by);
+				}
+				else
+				{
+					Console.ForegroundColor = ConsoleColor.Red;
+					Console.WriteLine("{0}: {1} != {2}", bx, correctY, by);
+				}
+			}
+			Console.ResetColor();
+			Console.WriteLine("\n{0} correct out of {1} = " + (double)matches / testInputs.Length, matches, testInputs.Length);
+		}
+
+		private static readonly Random Rand = new Random();
+
+		private static (byte[] training, byte[] test) GenerateByteInputs(double p)
+		{
+			if (p < 0 || p > 1)
+				throw new ArgumentException();
+
+			var training = new List<byte>((int)(p * 256));
+			var test = new List<byte>(256 - training.Capacity);
+			for (var i = 0; i < 256; i++)
+			{
+				if (Rand.Next(100) < p * 100)
+					training.Add((byte)i);
+				else
+					test.Add((byte)i); // BitConverter and endianness check would also work, but we have only one byte anyway
+			}
+			return (training.ToArray(), test.ToArray());
+		}
+
+		private static byte[] GenerateByteOutputs(TargetFunction func, byte[] inputs)
+		{
+			var desiredOutputs = new byte[inputs.Length];
+			for (var i = 0; i < inputs.Length; i++)
+				desiredOutputs[i] = func(inputs[i]);
+			return desiredOutputs;
+		}
+	}
 }
